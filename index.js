@@ -11,6 +11,8 @@ app.get('/api/scrape-performance', async (requestAnimationFrame, res) => {
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
 
+        //test
+
         const page = await browser.newPage();
 
         // authenticate into website
