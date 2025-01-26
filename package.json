@@ -6,6 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "echo 'No build step required for backend' && exit 0",
+    "prestart": "npm install",
     "start": "node index.js"
   },
   "keywords": [],
@@ -16,6 +17,6 @@
     "puppeteer": "^24.1.1"
   },
   "engines": {
-    "node": "16.x"
+    "node": "18.x"
   }
 }
