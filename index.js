@@ -1,8 +1,13 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
+const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+app.use(cors({
+    origin: 'http://localhost:3000', // only requests from 3000
+}));
 
 app.get('/api/scrape-performance', async (requestAnimationFrame, res) => {
     try {
@@ -16,18 +21,24 @@ app.get('/api/scrape-performance', async (requestAnimationFrame, res) => {
         const page = await browser.newPage();
 
         // authenticate into website
-        await page.authenticate({
-            username: 'report',
-            password: 'K1CRvBnqJPC9'
-        });
+        try {
+            await page.authenticate({
+                username: 'report',
+                password: 'K1CRvBnqJPC9'
+            });
+        } catch (authError) {
+            console.error('Authentication failed:', authError);
+            res.status(401).json({ error: 'Authentication failed. Check credentials.' });
+            return;
+        }
 
         // navigate to target page
         await page.goto('https://reporting.handwrytten.com/performance', {
             waitUntil: 'networkidle2'
         });
 
-        await page.waitForSelector('.text.number');
-        const numbers = await page.evaluate(() => Array.from(document.querySelectorAll('.text.number')).map((el) => el.textContent.trim()))
+        await page.waitForSelector('text.number');
+        const numbers = await page.evaluate(() => Array.from(document.querySelectorAll('text.number')).map((el) => el.textContent.trim()))
 
         await browser.close();
 
