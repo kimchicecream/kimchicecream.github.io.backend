@@ -50,8 +50,8 @@ app.get('/api/scrape-performance', async (requestAnimationFrame, res) => {
             waitUntil: 'networkidle2'
         });
 
-        await page.waitForSelector('text.number');
-        const numbers = await page.evaluate(() => Array.from(document.querySelectorAll('text.number')).map((el) => el.textContent.trim()))
+        await page.waitForSelector('g.trace text.number');
+        const numbers = await page.evaluate(() => Array.from(document.querySelectorAll('g.trace text.number')).map((el) => el.textContent.trim()))
 
         await browser.close();
 
