@@ -5,9 +5,22 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-app.use(cors({
-    origin: 'http://localhost:3000', // only requests from 3000
-}));
+const allowedOrigins = [
+    'http://localhost:3000',
+    'https://alexharimgo.com'
+];
+
+app.use(
+    cors({
+        origin: function (origin, callback) {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        }
+    })
+);
 
 app.get('/api/scrape-performance', async (requestAnimationFrame, res) => {
     try {
