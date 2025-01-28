@@ -22,12 +22,14 @@ app.use(
     })
 );
 
-// SCRAPE reporting.handwrytten.com/performance
-app.get('/api/scrape-performance', async (req, res) => {
-    try {
-        const browser = await puppeteer.launch({
+let cache = null;
+let lastFetchedTime = 0;
+let browser;
+
+async function getBrowserInstance() {
+    if (!browser) {
+        browser = await puppeteer.launch({
             headless: true,
-            // maybe add more?
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -36,45 +38,42 @@ app.get('/api/scrape-performance', async (req, res) => {
                 '--disable-gpu'
             ]
         });
+    }
+    return browser;
+}
 
-        //test
-
-        const page = await browser.newPage();
-
-        // disable images, fonts, stylesheets
-        await page.setViewport({ width: 800, height: 600 });
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
-                req.abort();
-            } else {
-                req.continue();
-            }
-        });
-
-        // authenticate into website
-        try {
-            await page.authenticate({
-                username: 'report',
-                password: 'K1CRvBnqJPC9'
-            });
-        } catch (authError) {
-            console.error('Authentication failed:', authError);
-            res.status(401).json({ error: 'Authentication failed. Check credentials.' });
-            return;
+// SCRAPE reporting.handwrytten.com/performance
+app.get('/api/scrape-performance', async (req, res) => {
+    try {
+        // if cached data exists and is less than 2 min old, return cache
+        const now = Date.now();
+        if (cache && now - lastFetchedTime < 2 * 60 * 1000) {
+            return res.json(cache);
         }
 
-        // navigate to target page
+        const browser = await getBrowserInstance();
+        const page = await browser.newPage();
+
+        await page.authenticate({
+            username: 'report',
+            password: 'K1CRvBnqJPC9'
+        });
+
         await page.goto('https://reporting.handwrytten.com/performance', {
             waitUntil: 'domcontentloaded',
-            timeout: 30000
+            timeout: 60000
         });
 
         await page.waitForSelector('g.trace text.number');
-        const numbers = await page.evaluate(() => Array.from(document.querySelectorAll('g.trace text.number')).map((el) => el.textContent.trim()))
+        const numbers = await page.evaluate(() =>
+            Array.from(document.querySelectorAll('g.trace text.number')).map(el => el.textContent.trim())
+        );
 
         await page.close();
-        await browser.close();
+
+        // save cache and timestamp
+        cache = numbers;
+        lastFetchedTime = Date.now();
 
         res.json(numbers);
     } catch (error) {
