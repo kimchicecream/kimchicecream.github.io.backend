@@ -22,7 +22,8 @@ app.use(
     })
 );
 
-app.get('/api/scrape-performance', async (requestAnimationFrame, res) => {
+// SCRAPE reporting.handwrytten.com/performance
+app.get('/api/scrape-performance', async (req, res) => {
     try {
         const browser = await puppeteer.launch({
             headless: true,
@@ -59,6 +60,73 @@ app.get('/api/scrape-performance', async (requestAnimationFrame, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Failed to scrape data' });
+    }
+});
+
+// SCRAPE 192.168.0.91/jobs
+app.get('/api/scrape-jobs', async (req, res) => {
+    try {
+        const browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+
+        const page = await browser.newPage();
+
+        //navigate to the local network page
+        const jobPageUrl = 'http://192.168.0.91/jobs';
+        await page.goto(jobPageUrl, {
+            waitUntil: 'networkidle2',
+            timeout: 60000
+        });
+
+        await page.waitForSelector('tbody tr', { timeout: 60000 });
+
+        const extractedData = await page.evaluate(() => {
+            const rows = Awway.from(document.querySelectorAll('tbody tr'));
+
+            let groupedData = [];
+            let currentGroup = null;
+
+            rows.forEach((row) => {
+                const cells = Array.from(row.querySelectorAll('td'));
+                const rowData = cells.map(td => td.textContent.trim());
+
+                // checks if this row contains a <strong> with ".pdf"
+                const hasPdf = cells.some(td => {
+                    const strong = td.querySelector('strong');
+                    return strong && strong.textContent.trim().endsWith('.pdf');
+                });
+
+                if (hasPdf) {
+                    // start a new group when a new PDF is found
+                    if (currentGroup) {
+                        groupedData.push(currentGroup); // save the previous group
+                    }
+                    currentGroup = {
+                        pdfFile: rowData[0], // store the .pdf filename
+                        dataRows: []         // initialize an empty array for its rows
+                    };
+                } else if (currentGroup) {
+                    // add row data to the current PDF group
+                    currentGroup.dataRows.push(rowData);
+                }
+            });
+
+            // push the last captured group
+            if (currentGroup) {
+                groupedData.push(currentGroup);
+            }
+
+            return groupedData;
+        });
+
+        await browser.close();
+
+        res.json({ extractedData });
+    } catch (error) {
+        console.error('Error scraping job data:', error);
+        res.status(500).json({ error: 'Failed to scrape job data' });
     }
 });
 
