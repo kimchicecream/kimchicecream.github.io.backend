@@ -84,6 +84,12 @@ app.get('/api/scrape-performance', async (req, res) => {
 
 // SCRAPE 192.168.0.91/jobs
 app.get('/api/scrape-jobs', async (req, res) => {
+    const machine = req.query.machine; // get machine number from parameter
+
+    if (!machine || isNaN(machine) || machine < 1 || machine > 300) {
+        return res.status(400).json({ error: 'Invalid machine number (1-300).' });
+    }
+
     try {
         const browser = await puppeteer.launch({
             headless: true,
@@ -110,12 +116,13 @@ app.get('/api/scrape-jobs', async (req, res) => {
         });
 
         //navigate to the local network page
-        await page.goto('http://192.168.0.100/jobs', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const jobPageUrl = `http://192.168.0.${machine}/jobs`;
+        await page.goto(jobPageUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
 
         await page.waitForSelector('tbody tr', { timeout: 15000 });
 
         const extractedData = await page.evaluate(() => {
-            const rows = Awway.from(document.querySelectorAll('tbody tr'));
+            const rows = Array.from(document.querySelectorAll('tbody tr'));
 
             let groupedData = [];
             let currentGroup = null;
@@ -137,7 +144,7 @@ app.get('/api/scrape-jobs', async (req, res) => {
                     }
                     currentGroup = {
                         pdfFile: rowData[0], // store the .pdf filename
-                        dataRows: []         // initialize an empty array for its rows
+                        dataRows: [] // initialize an empty array for its rows
                     };
                 } else if (currentGroup) {
                     // add row data to the current PDF group
