@@ -27,12 +27,30 @@ app.get('/api/scrape-performance', async (req, res) => {
     try {
         const browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            // maybe add more?
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--single-process',
+                '--disable-gpu'
+            ]
         });
 
         //test
 
         const page = await browser.newPage();
+
+        // disable images, fonts, stylesheets
+        await page.setViewport({ width: 800, height: 600 });
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
 
         // authenticate into website
         try {
@@ -48,12 +66,14 @@ app.get('/api/scrape-performance', async (req, res) => {
 
         // navigate to target page
         await page.goto('https://reporting.handwrytten.com/performance', {
-            waitUntil: 'networkidle2'
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
         });
 
         await page.waitForSelector('g.trace text.number');
         const numbers = await page.evaluate(() => Array.from(document.querySelectorAll('g.trace text.number')).map((el) => el.textContent.trim()))
 
+        await page.close();
         await browser.close();
 
         res.json(numbers);
@@ -68,19 +88,32 @@ app.get('/api/scrape-jobs', async (req, res) => {
     try {
         const browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--single-process',
+                '--disable-gpu'
+            ]
         });
 
         const page = await browser.newPage();
 
-        //navigate to the local network page
-        const jobPageUrl = 'http://192.168.0.91/jobs';
-        await page.goto(jobPageUrl, {
-            waitUntil: 'networkidle2',
-            timeout: 60000
+        // disable images, fonts, stylesheets
+        await page.setViewport({ width: 800, height: 600 });
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+                req.abort();
+            } else {
+                req.continue();
+            }
         });
 
-        await page.waitForSelector('tbody tr', { timeout: 60000 });
+        //navigate to the local network page
+        await page.goto('http://192.168.0.100/jobs', { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+        await page.waitForSelector('tbody tr', { timeout: 15000 });
 
         const extractedData = await page.evaluate(() => {
             const rows = Awway.from(document.querySelectorAll('tbody tr'));
@@ -121,11 +154,13 @@ app.get('/api/scrape-jobs', async (req, res) => {
             return groupedData;
         });
 
+        await page.close();
         await browser.close();
 
         res.json({ extractedData });
     } catch (error) {
         console.error('Error scraping job data:', error);
+        await page.close();
         res.status(500).json({ error: 'Failed to scrape job data' });
     }
 });
