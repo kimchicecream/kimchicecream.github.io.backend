@@ -23,17 +23,12 @@ app.use(cors({
     credentials: true
 }));
 
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*'); // Allow frontend requests
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    next();
-});
-
 app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Origin', '*');
+    const origin = allowedOrigins.includes(req.headers.origin) ? req.headers.origin : 'https://alexharimgo.com';
+    res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
     res.sendStatus(200);
 });
 
@@ -102,8 +97,8 @@ app.get('/api/scrape-performance', async (req, res) => {
 app.get('/api/scrape-jobs', async (req, res) => {
     const machine = req.query.machine; // get machine number from parameter
 
-    if (!machine || isNaN(machine) || machine < 1 || machine > 300) {
-        return res.status(400).json({ error: 'Invalid machine number (1-300).' });
+    if (!machine || isNaN(machine) || machine < 71 || machine > 110) {
+        return res.status(400).json({ error: 'Invalid machine number (71-110).' });
     }
 
     try {
