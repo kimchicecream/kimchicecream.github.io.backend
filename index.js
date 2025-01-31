@@ -3,7 +3,7 @@ const puppeteer = require('puppeteer');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5001; // change for new machines
 
 const allowedOrigins = [
     'http://localhost:3000',
@@ -179,11 +179,25 @@ app.get('/api/scrape-jobs', async (req, res) => {
         res.json({ extractedData });
     } catch (error) {
         console.error('Error scraping job data:', error);
-        await page.close();
+
+        if (page) {
+            await page.close().catch(err => console.error('Error closing Puppeteer page:', err));
+        }
+
         res.status(500).json({ error: 'Failed to scrape job data' });
     }
 });
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+
+// prevent backend crashes
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
