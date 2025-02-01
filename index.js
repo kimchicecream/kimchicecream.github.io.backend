@@ -58,9 +58,9 @@ async function getBrowserInstance() {
 // SCRAPE reporting.handwrytten.com/performance
 app.get('/api/scrape-performance', async (req, res) => {
     try {
-        // if cached data exists and is less than 2 min old, return cache
+        // if cached data exists and is less than 1 min old, return cache
         const now = Date.now();
-        if (cache && now - lastFetchedTime < 2 * 60 * 1000) {
+        if (cache && now - lastFetchedTime < 1 * 60 * 1000) {
             return res.json(cache);
         }
 
@@ -95,29 +95,27 @@ app.get('/api/scrape-performance', async (req, res) => {
     }
 });
 
+let jobCache = {};
+let jobLastFetched = {};
+
 // SCRAPE 192.168.0.91/jobs
 app.get('/api/scrape-jobs', async (req, res) => {
-    const machine = req.query.machine; // get machine number from parameter
+    const machine = req.query.machine;
 
     if (!machine || isNaN(machine) || machine < 71 || machine > 110) {
         return res.status(400).json({ error: 'Invalid machine number (71-110).' });
     }
 
-    try {
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--single-process',
-                '--disable-gpu'
-            ]
-        });
+    // check if cache exists and is less than 1 min old
+    const now = Date.now();
+    if (jobCache[machine] && now - jobLastFetched[machine] < 1 * 60 * 1000) {
+        return res.json({ extractedData: jobCache[machine] });
+    }
 
+    try {
+        const browser = await getBrowserInstance(); // reuse the existing browser instance
         const page = await browser.newPage();
 
-        // disable images, fonts, stylesheets
         await page.setViewport({ width: 800, height: 600 });
         await page.setRequestInterception(true);
         page.on('request', (req) => {
@@ -128,15 +126,12 @@ app.get('/api/scrape-jobs', async (req, res) => {
             }
         });
 
-        //navigate to the local network page
         const jobPageUrl = `http://192.168.0.${machine}/jobs`;
         await page.goto(jobPageUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
-
         await page.waitForSelector('tbody tr', { timeout: 15000 });
 
         const extractedData = await page.evaluate(() => {
             const rows = Array.from(document.querySelectorAll('tbody tr'));
-
             let groupedData = [];
             let currentGroup = null;
 
@@ -144,46 +139,32 @@ app.get('/api/scrape-jobs', async (req, res) => {
                 const cells = Array.from(row.querySelectorAll('td'));
                 const rowData = cells.map(td => td.textContent.trim());
 
-                // checks if this row contains a <strong> with ".pdf"
                 const hasPdf = cells.some(td => {
                     const strong = td.querySelector('strong');
                     return strong && strong.textContent.trim().endsWith('.pdf');
                 });
 
                 if (hasPdf) {
-                    // start a new group when a new PDF is found
-                    if (currentGroup) {
-                        groupedData.push(currentGroup); // save the previous group
-                    }
-                    currentGroup = {
-                        pdfFile: rowData[0], // store the .pdf filename
-                        dataRows: [] // initialize an empty array for its rows
-                    };
+                    if (currentGroup) groupedData.push(currentGroup);
+                    currentGroup = { pdfFile: rowData[0], dataRows: [] };
                 } else if (currentGroup) {
-                    // add row data to the current PDF group
                     currentGroup.dataRows.push(rowData);
                 }
             });
 
-            // push the last captured group
-            if (currentGroup) {
-                groupedData.push(currentGroup);
-            }
-
+            if (currentGroup) groupedData.push(currentGroup);
             return groupedData;
         });
 
         await page.close();
-        await browser.close();
+
+        // Update cache
+        jobCache[machine] = extractedData;
+        jobLastFetched[machine] = Date.now();
 
         res.json({ extractedData });
     } catch (error) {
         console.error('Error scraping job data:', error);
-
-        if (page) {
-            await page.close().catch(err => console.error('Error closing Puppeteer page:', err));
-        }
-
         res.status(500).json({ error: 'Failed to scrape job data' });
     }
 });
